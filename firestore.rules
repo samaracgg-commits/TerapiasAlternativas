@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper to validate ID strings to prevent poisoning
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Authentication helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Extract current/incoming data
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Helper to fetch user profiles
+    function getUserData(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Check if the user is a registered therapist or admin
+    function isTherapist(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) && 
+             (getUserData(uid).role == 'therapist' || getUserData(uid).role == 'admin');
+    }
+
+    // Check if the user is a registered admin
+    function isAdmin(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) && 
+             getUserData(uid).role == 'admin';
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      
+      // Any authenticated user can create their profile as patient.
+      // Therapists can be created if pre-approved/existing admin sets them, or if registering.
+      allow create: if isSignedIn() && userId == request.auth.uid && 
+                    incoming().uid == userId &&
+                    incoming().email == request.auth.token.email &&
+                    (incoming().role == 'patient' || isTherapist(request.auth.uid));
+                    
+      // Users can update their own non-role fields (role is immutable)
+      allow update: if isSignedIn() && userId == request.auth.uid &&
+                    incoming().uid == userId &&
+                    incoming().role == existing().role;
+                    
+      allow delete: if isSignedIn() && (userId == request.auth.uid || isTherapist(request.auth.uid));
+    }
+
+    // --- Appointments Collection ---
+    match /appointments/{appointmentId} {
+      allow get: if isSignedIn() && (existing().patientId == request.auth.uid || isTherapist(request.auth.uid));
+      
+      // Enforce query limits so users can only list their own appointments (therapists can see all)
+      allow list: if isSignedIn() && (resource.data.patientId == request.auth.uid || isTherapist(request.auth.uid));
+      
+      allow create: if isSignedIn() && isValidId(appointmentId) &&
+                    (
+                      // Patient scheduling for themselves (initial status must be pending)
+                      (incoming().patientId == request.auth.uid && incoming().status == 'pending' && incoming().createdAt == request.time) ||
+                      // Therapist scheduling for any patient
+                      (isTherapist(request.auth.uid) && incoming().createdAt == request.time)
+                    );
+                    
+      allow update: if isSignedIn() && isValidId(appointmentId) &&
+                    existing().status != 'completed' && existing().status != 'cancelled' &&
+                    (
+                      // Patients can only cancel their own appointments
+                      (existing().patientId == request.auth.uid && incoming().status == 'cancelled' && 
+                       incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                      // Therapists/admins can modify anything
+                      (isTherapist(request.auth.uid))
+                    );
+                    
+      allow delete: if isSignedIn() && isTherapist(request.auth.uid);
+    }
+
+    // --- Clinical Records Collection ---
+    match /clinicalRecords/{recordId} {
+      allow get: if isSignedIn() && (existing().patientId == request.auth.uid || isTherapist(request.auth.uid));
+      
+      // Enforce list queries
+      allow list: if isSignedIn() && (resource.data.patientId == request.auth.uid || isTherapist(request.auth.uid));
+      
+      // Only therapists/admins can create clinical records
+      allow create: if isSignedIn() && isValidId(recordId) && isTherapist(request.auth.uid) &&
+                    incoming().therapistId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+                    
+      // Only therapist creator or admin can update
+      allow update: if isSignedIn() && isValidId(recordId) && 
+                    (existing().therapistId == request.auth.uid || isAdmin(request.auth.uid)) &&
+                    incoming().therapistId == existing().therapistId;
+                    
+      allow delete: if isSignedIn() && isTherapist(request.auth.uid);
+    }
+
+    // --- Messages Collection ---
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && (existing().senderId == request.auth.uid || existing().receiverId == request.auth.uid);
+      
+      // Enforce secure list filters
+      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      
+      allow create: if isSignedIn() && isValidId(messageId) &&
+                    incoming().senderId == request.auth.uid &&
+                    incoming().createdAt == request.time;
+                    
+      allow update: if false; // Messages are immutable
+      allow delete: if isSignedIn() && existing().senderId == request.auth.uid;
+    }
+  }
+}

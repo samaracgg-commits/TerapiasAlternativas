@@ -1,0 +1,89 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile containing roles and contact information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID matching auth UID" },
+        "name": { "type": "string", "description": "Full name of the user" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "role": { "type": "string", "enum": ["patient", "therapist", "admin"], "description": "User account role" },
+        "phone": { "type": "string", "description": "Optional contact number" },
+        "photoURL": { "type": "string", "description": "Profile picture URL" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Document creation timestamp" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Therapy session appointment record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique appointment ID" },
+        "patientId": { "type": "string", "description": "UID of the patient" },
+        "patientName": { "type": "string", "description": "Name of the patient" },
+        "therapistId": { "type": "string", "description": "UID of the therapist" },
+        "therapistName": { "type": "string", "description": "Name of the therapist" },
+        "date": { "type": "string", "format": "date", "description": "Date of the appointment YYYY-MM-DD" },
+        "time": { "type": "string", "description": "Time of the appointment HH:MM" },
+        "therapyType": { "type": "string", "description": "Type of therapy session" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "completed", "cancelled"], "description": "Current appointment status" },
+        "notes": { "type": "string", "description": "Session prep notes" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["id", "patientId", "patientName", "therapistId", "therapistName", "date", "time", "therapyType", "status"]
+    },
+    "ClinicalRecord": {
+      "title": "Clinical Record",
+      "description": "Patient's therapy progress note / record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique record ID" },
+        "patientId": { "type": "string", "description": "UID of the patient" },
+        "therapistId": { "type": "string", "description": "UID of the therapist" },
+        "therapistName": { "type": "string", "description": "Name of the therapist" },
+        "date": { "type": "string", "format": "date", "description": "Date of the therapy session YYYY-MM-DD" },
+        "therapyType": { "type": "string", "description": "Therapy type" },
+        "objective": { "type": "string", "description": "The specific objective of the session" },
+        "evolution": { "type": "string", "description": "How the patient evolved during the session" },
+        "recommendations": { "type": "string", "description": "Recommendations for the patient" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "patientId", "therapistId", "therapistName", "date", "therapyType", "objective", "evolution", "recommendations"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Instant messaging between therapists and patients.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message ID" },
+        "senderId": { "type": "string", "description": "Sender user ID" },
+        "senderName": { "type": "string", "description": "Sender display name" },
+        "receiverId": { "type": "string", "description": "Receiver user ID" },
+        "text": { "type": "string", "description": "Content of the message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Message send timestamp" }
+      },
+      "required": ["id", "senderId", "senderName", "receiverId", "text"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles catalog."
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Scheduled appointments."
+    },
+    "/clinicalRecords/{recordId}": {
+      "schema": "ClinicalRecord",
+      "description": "Evolution notes and clinical history."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Real-time communication logs."
+    }
+  }
+}
