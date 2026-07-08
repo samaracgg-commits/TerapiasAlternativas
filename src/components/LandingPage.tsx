@@ -54,15 +54,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // States for advanced Firebase project configurations (such as clinicaterapias-23ef8)
+  // States for advanced Firebase project configurations (such as bdclinica-nuevo)
   const [showFirebaseConfig, setShowFirebaseConfig] = useState(false);
   const [pasteJson, setPasteJson] = useState('');
   const [customApiKey, setCustomApiKey] = useState(firebaseConfig.apiKey || '');
   const [customAppId, setCustomAppId] = useState(firebaseConfig.appId || '');
   const [customMessagingSenderId, setCustomMessagingSenderId] = useState(firebaseConfig.messagingSenderId || '');
-  const [customAuthDomain, setCustomAuthDomain] = useState(firebaseConfig.authDomain || 'clinicaterapias-23ef8.firebaseapp.com');
-  const [customProjectId, setCustomProjectId] = useState(firebaseConfig.projectId || 'clinicaterapias-23ef8');
-  const [customStorageBucket, setCustomStorageBucket] = useState(firebaseConfig.storageBucket || 'clinicaterapias-23ef8.firebasestorage.app');
+  const [customAuthDomain, setCustomAuthDomain] = useState(firebaseConfig.authDomain || 'bdclinica-nuevo.firebaseapp.com');
+  const [customProjectId, setCustomProjectId] = useState(firebaseConfig.projectId || 'bdclinica-nuevo');
+  const [customStorageBucket, setCustomStorageBucket] = useState(firebaseConfig.storageBucket || 'bdclinica-nuevo.firebasestorage.app');
   const [copiedDomain, setCopiedDomain] = useState(false);
 
   const handlePasteConfigJson = (jsonStr: string) => {
@@ -107,20 +107,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       return;
     }
     
-    // Auto-sanitize project ID just in case the user types the extra 's'
+    // Auto-sanitize project ID just in case the user types the extra 's' or older project name
     let sanitizedProjectId = customProjectId.trim();
-    if (sanitizedProjectId.includes('clinicasterapias')) {
-      sanitizedProjectId = sanitizedProjectId.replace('clinicasterapias', 'clinicaterapias');
+    if (sanitizedProjectId.includes('clinicasterapias') || sanitizedProjectId.includes('clinicaterapias')) {
+      sanitizedProjectId = 'bdclinica-nuevo';
     }
     
     let sanitizedAuthDomain = customAuthDomain.trim() || `${sanitizedProjectId}.firebaseapp.com`;
-    if (sanitizedAuthDomain.includes('clinicasterapias')) {
-      sanitizedAuthDomain = sanitizedAuthDomain.replace('clinicasterapias', 'clinicaterapias');
+    if (sanitizedAuthDomain.includes('clinicasterapias') || sanitizedAuthDomain.includes('clinicaterapias')) {
+      sanitizedAuthDomain = 'bdclinica-nuevo.firebaseapp.com';
     }
 
     let sanitizedStorageBucket = customStorageBucket.trim() || `${sanitizedProjectId}.firebasestorage.app`;
-    if (sanitizedStorageBucket.includes('clinicasterapias')) {
-      sanitizedStorageBucket = sanitizedStorageBucket.replace('clinicasterapias', 'clinicaterapias');
+    if (sanitizedStorageBucket.includes('clinicasterapias') || sanitizedStorageBucket.includes('clinicaterapias')) {
+      sanitizedStorageBucket = 'bdclinica-nuevo.firebasestorage.app';
     }
 
     const newConfig = {
@@ -149,11 +149,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
         friendlyMsg = `⚠️ Dominio no autorizado en tu Firebase. Debes añadir "${window.location.hostname}" a los Dominios Autorizados en la consola de tu Firebase (Authentication > Settings > Authorized domains).`;
       } else if (err.code === 'auth/api-key-not-valid' || err.message?.includes('invalid-api-key') || err.message?.includes('API key')) {
-        friendlyMsg = '⚠️ Clave de API (API Key) incorrecta. Asegúrate de configurar las credenciales correctas de tu proyecto "clinicaterapias-23ef8" en el panel inferior.';
+        friendlyMsg = '⚠️ Clave de API (API Key) incorrecta. Asegúrate de configurar las credenciales correctas de tu proyecto "bdclinica-nuevo" en el panel inferior.';
       } else if (err.code === 'auth/operation-not-allowed') {
         friendlyMsg = '⚠️ El inicio de sesión con Google no está habilitado en tu proyecto Firebase. Habilítalo en Authentication > Sign-in method.';
       } else if (err.code === 'auth/configuration-not-found' || err.message?.includes('configuration-not-found')) {
-        friendlyMsg = '⚠️ Error de configuración. Por favor verifica que tu API Key sea correcta para el proyecto "clinicaterapias-23ef8".';
+        friendlyMsg = '⚠️ Error de configuración. Por favor verifica que tu API Key sea correcta para el proyecto "bdclinica-nuevo".';
       }
       setErrorMessage(friendlyMsg);
     } finally {
@@ -280,11 +280,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-4" id="system-status">
-            <div className="text-[11px] font-semibold text-sage-500 flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-olive-500 rounded-full animate-ping"></span>
-              <span>Firebase Tiempo Real Activo</span>
-            </div>
-            
             <button
               onClick={onToggleTheme}
               className="text-sage-500 hover:text-olive-800 hover:bg-olive-50/50 p-2.5 rounded-xl border border-transparent hover:border-sage-200/50 transition cursor-pointer"
@@ -297,7 +292,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </header>
 
-      <main className="flex-grow max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center" id="landing-main">
+      <main className="flex-grow max-w-7xl mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-12 gap-12 items-start" id="landing-main">
         {/* Left column: Text & Info */}
         <div className="lg:col-span-7 space-y-8" id="landing-intro">
           <div className="inline-flex items-center gap-2 bg-olive-50 text-olive-700 px-3 py-1 rounded-full text-xs font-semibold border border-olive-200/40">
@@ -361,9 +356,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
-        {/* Right column: Login Action Box */}
-        <div className="lg:col-span-5" id="landing-login-card">
-          <div className="bg-natural-card rounded-3xl border border-sage-200/50 shadow-lg shadow-sage-200/10 p-6 sm:p-8 space-y-6">
+        {/* Right column: Visual Therapy Photo + Compact User Access Box */}
+        <div className="lg:col-span-5 space-y-5" id="landing-visual-column">
+          {/* Realistic Photography Evoking Natural Therapies */}
+          <div className="relative rounded-3xl overflow-hidden shadow-sm border border-sage-200/40 bg-natural-card group h-[220px] sm:h-[240px]">
+            <img 
+              src="https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=800" 
+              alt="Terapias Naturales y Bienestar" 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent"></div>
+            <div className="absolute bottom-3.5 left-3.5 right-3.5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md rounded-2xl p-3 border border-white/20 shadow">
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <span className="w-1.5 h-1.5 bg-olive-500 rounded-full"></span>
+                <p className="text-[9px] uppercase font-bold tracking-wider text-olive-800 dark:text-olive-400 font-mono">Espacio de Salud Natural</p>
+              </div>
+              <p className="font-serif italic text-[11px] text-sage-800 dark:text-sage-200 leading-normal">
+                Restauramos tu equilibrio físico y emocional con terapias naturales y cuidado holístico.
+              </p>
+            </div>
+          </div>
+
+          {/* Redesigned Compact Login/Register Card (Less Prominent) */}
+          <div className="bg-natural-card rounded-3xl border border-sage-200/50 shadow-sm p-5 space-y-4" id="landing-login-card">
             
             {/* Segmented Auth Selector */}
             <div className="flex bg-natural-bg p-1 rounded-xl border border-sage-200/40" id="auth-selector">
@@ -374,7 +390,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   setErrorMessage('');
                   setSuccessMessage('');
                 }}
-                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   authMode === 'login'
                     ? 'bg-olive-600 text-white shadow-sm'
                     : 'text-sage-600 hover:text-olive-800'
@@ -389,7 +405,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   setErrorMessage('');
                   setSuccessMessage('');
                 }}
-                className={`flex-1 text-center py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`flex-1 text-center py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   authMode === 'register'
                     ? 'bg-olive-600 text-white shadow-sm'
                     : 'text-sage-600 hover:text-olive-800'
@@ -399,14 +415,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </button>
             </div>
 
-            <div className="space-y-1 text-center">
-              <h2 className="text-xl font-serif italic font-bold text-olive-900">
-                {authMode === 'login' ? 'Bienvenido de Nuevo' : 'Crea tu Cuenta'}
+            <div className="space-y-0.5 text-center">
+              <h2 className="text-sm font-serif italic font-bold text-olive-900">
+                {authMode === 'login' ? 'Acceso de Usuarios' : 'Crea tu Cuenta'}
               </h2>
-              <p className="text-[11px] text-sage-600">
+              <p className="text-[10px] text-sage-600">
                 {authMode === 'login' 
-                  ? 'Introduce tus credenciales para acceder a tu historial clínico' 
-                  : 'Regístrate para programar citas y chatear con especialistas'}
+                  ? 'Introduce tus credenciales para acceder' 
+                  : 'Regístrate para programar citas y consultas'}
               </p>
             </div>
 
@@ -673,7 +689,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       Pega tu Firebase Config JSON (desde la Consola de Firebase):
                     </label>
                     <textarea
-                      placeholder={`const firebaseConfig = {\n  apiKey: "...",\n  authDomain: "...",\n  projectId: "clinicaterapias-23ef8",\n  ...\n};`}
+                      placeholder={`const firebaseConfig = {\n  apiKey: "...",\n  authDomain: "...",\n  projectId: "bdclinica-nuevo",\n  ...\n};`}
                       value={pasteJson}
                       onChange={(e) => handlePasteConfigJson(e.target.value)}
                       className="w-full bg-white border border-sage-200 text-[10px] p-2 rounded-xl focus:outline-none focus:ring-1 focus:ring-olive-500 font-mono h-20 shadow-sm"

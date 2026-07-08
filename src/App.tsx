@@ -3,7 +3,7 @@ import { onAuthStateChanged, signOut, isSignInWithEmailLink, signInWithEmailLink
 import { collection, query, where, onSnapshot, doc, updateDoc, getDoc } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { UserProfile, Appointment, ClinicalRecord, Message, UserRole } from './types';
-import { createUserProfile, getUserProfile } from './lib/db';
+import { createUserProfile, getUserProfile, getLocalCollection, saveLocalCollection } from './lib/db';
 
 // Components
 import { LandingPage } from './components/LandingPage';
@@ -33,7 +33,8 @@ import {
   CheckCircle2,
   Sun,
   Moon,
-  MapPin
+  MapPin,
+  AlertCircle
 } from 'lucide-react';
 
 export default function App() {
@@ -43,6 +44,13 @@ export default function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
     return saved === 'dark';
+  });
+  const [isFirestoreOffline, setIsFirestoreOffline] = useState(() => {
+    try {
+      return localStorage.getItem('is_firestore_offline') === 'true';
+    } catch (e) {
+      return false;
+    }
   });
 
   useEffect(() => {
@@ -94,45 +102,70 @@ export default function App() {
       setAuthLoading(true);
       if (firebaseUser) {
         try {
-          // Attempt to fetch profile
-          let profile = await getUserProfile(firebaseUser.uid);
+          // Attempt to fetch profile with offline resilience
+          let profile: UserProfile | null = null;
+          let wasError = false;
+          try {
+            profile = await getUserProfile(firebaseUser.uid);
+          } catch (err) {
+            console.warn("Firestore error during profile fetch, switching to local fallback:", err);
+            wasError = true;
+            setIsFirestoreOffline(true);
+            try { localStorage.setItem('is_firestore_offline', 'true'); } catch (e) {}
+          }
           
-          if (!profile) {
-            // Retrieve any pending custom registration fields from localStorage
-            let pendingName = '';
-            let pendingRole: UserRole = 'patient';
-            let pendingPhone = '';
+          if (wasError || !profile) {
+            // Check if there is a locally stored copy of this profile
+            const localUsers = getLocalCollection<UserProfile>('local_users');
+            const cachedUser = localUsers.find(u => u.uid === firebaseUser.uid);
             
-            try {
-              let pendingStr = localStorage.getItem(`pending_profile_${firebaseUser.uid}`);
-              if (!pendingStr) {
-                pendingStr = localStorage.getItem('pending_magic_profile');
+            if (cachedUser) {
+              profile = cachedUser;
+            } else {
+              // Retrieve any pending custom registration fields from localStorage
+              let pendingName = '';
+              let pendingRole: UserRole = 'patient';
+              let pendingPhone = '';
+              
+              try {
+                let pendingStr = localStorage.getItem(`pending_profile_${firebaseUser.uid}`);
+                if (!pendingStr) {
+                  pendingStr = localStorage.getItem('pending_magic_profile');
+                }
+                if (pendingStr) {
+                  const pending = JSON.parse(pendingStr);
+                  pendingName = pending.name || '';
+                  pendingRole = pending.role || 'patient';
+                  pendingPhone = pending.phone || '';
+                  
+                  // Clean up keys
+                  localStorage.removeItem(`pending_profile_${firebaseUser.uid}`);
+                  localStorage.removeItem('pending_magic_profile');
+                }
+              } catch (e) {
+                console.error("Error reading pending profile:", e);
               }
-              if (pendingStr) {
-                const pending = JSON.parse(pendingStr);
-                pendingName = pending.name || '';
-                pendingRole = pending.role || 'patient';
-                pendingPhone = pending.phone || '';
-                
-                // Clean up keys
-                localStorage.removeItem(`pending_profile_${firebaseUser.uid}`);
-                localStorage.removeItem('pending_magic_profile');
-              }
-            } catch (e) {
-              console.error("Error reading pending profile:", e);
-            }
 
-            // First time login - Create user profile document in Firestore
-            const newProfile: Omit<UserProfile, 'createdAt'> = {
-              uid: firebaseUser.uid,
-              name: pendingName || firebaseUser.displayName || 'Usuario de Sinergia',
-              email: firebaseUser.email || '',
-              role: pendingRole, 
-              phone: pendingPhone || firebaseUser.phoneNumber || '',
-              photoURL: firebaseUser.photoURL || ''
-            };
-            await createUserProfile(newProfile);
-            profile = { ...newProfile, createdAt: new Date().toISOString() };
+              // Create local fallback
+              const newProfile: UserProfile = {
+                uid: firebaseUser.uid,
+                name: pendingName || firebaseUser.displayName || 'Usuario de Sinergia (Modo Local)',
+                email: firebaseUser.email || '',
+                role: pendingRole, 
+                phone: pendingPhone || firebaseUser.phoneNumber || '',
+                photoURL: firebaseUser.photoURL || '',
+                createdAt: new Date().toISOString()
+              };
+              
+              // Cache locally
+              const updatedLocalUsers = [...localUsers.filter(u => u.uid !== firebaseUser.uid), newProfile];
+              saveLocalCollection('local_users', updatedLocalUsers);
+              
+              // Try registering to Firestore in background without blocking
+              createUserProfile(newProfile).catch(e => console.warn("Could not register user to Firestore:", e));
+              
+              profile = newProfile;
+            }
           }
           
           setCurrentUser(profile);
@@ -148,6 +181,23 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Listen for local DB updates when in offline mode
+  useEffect(() => {
+    const handleLocalUpdate = () => {
+      if (isFirestoreOffline && currentUser) {
+        setAppointments(getLocalCollection<Appointment>('local_appointments'));
+        setClinicalRecords(getLocalCollection<ClinicalRecord>('local_clinicalRecords'));
+        setMessages(getLocalCollection<Message>('local_messages'));
+        setPatients(getLocalCollection<UserProfile>('local_users').filter(p => p.role === 'patient'));
+      }
+    };
+
+    window.addEventListener('local-db-updated', handleLocalUpdate);
+    return () => {
+      window.removeEventListener('local-db-updated', handleLocalUpdate);
+    };
+  }, [isFirestoreOffline, currentUser]);
+
   // Set up real-time observers when logged-in user changes role or identity
   useEffect(() => {
     if (!currentUser) {
@@ -155,6 +205,15 @@ export default function App() {
       setClinicalRecords([]);
       setMessages([]);
       setPatients([]);
+      return;
+    }
+
+    // In offline mode, skip real-time observers to avoid errors and load from localStorage
+    if (isFirestoreOffline) {
+      setAppointments(getLocalCollection<Appointment>('local_appointments'));
+      setClinicalRecords(getLocalCollection<ClinicalRecord>('local_clinicalRecords'));
+      setMessages(getLocalCollection<Message>('local_messages'));
+      setPatients(getLocalCollection<UserProfile>('local_users').filter(p => p.role === 'patient'));
       return;
     }
 
@@ -267,12 +326,27 @@ export default function App() {
   // Handle Testing/Demo Role Switch
   const handleToggleRole = async (newRole: UserRole) => {
     if (!currentUser) return;
-    try {
-      const userRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userRef, { role: newRole });
-      setCurrentUser(prev => prev ? { ...prev, role: newRole } : null);
-    } catch (err) {
-      console.error("Error switching test roles in database:", err);
+    
+    // Update local user profile
+    const localUsers = getLocalCollection<UserProfile>('local_users');
+    const index = localUsers.findIndex(u => u.uid === currentUser.uid);
+    const updatedProfile = { ...currentUser, role: newRole };
+    if (index >= 0) {
+      localUsers[index] = updatedProfile;
+    } else {
+      localUsers.push(updatedProfile);
+    }
+    saveLocalCollection('local_users', localUsers);
+    setCurrentUser(updatedProfile);
+
+    // Try updating remote db in background
+    if (!isFirestoreOffline) {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await updateDoc(userRef, { role: newRole });
+      } catch (err) {
+        console.warn("Could not switch role on Firestore server:", err);
+      }
     }
   };
 
@@ -375,6 +449,47 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {isFirestoreOffline && (
+        <div className="bg-amber-50 border-y border-amber-200/50 px-6 py-3" id="offline-banner">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2.5 text-amber-800">
+              <AlertCircle className="w-4.5 h-4.5 shrink-0 text-amber-600 animate-pulse" />
+              <p className="text-xs font-medium font-sans">
+                <strong>Modo Local Activo (Firestore Desconectado):</strong> El sistema está funcionando localmente en tu navegador. Tus citas y expedientes se guardarán de forma segura en tu caché local. Para conectar con tu base de datos en la nube en tiempo real, verifica tu configuración de Firebase o haz clic en "Ver Configuración".
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  // Scroll to config assistant or signout to view config
+                  const el = document.getElementById('fb-config-assistant');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth' });
+                  } else {
+                    handleSignOut();
+                  }
+                }}
+                className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg transition"
+              >
+                Ver Configuración
+              </button>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.removeItem('is_firestore_offline');
+                    localStorage.removeItem('custom_firebase_config');
+                    window.location.reload();
+                  } catch (e) {}
+                }}
+                className="text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-bold px-3 py-1.5 rounded-lg transition"
+              >
+                Reintentar Conexión
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Body */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-6 py-8" id="workspace-main">

@@ -6,22 +6,20 @@ import defaultFirebaseConfig from '../firebase-applet-config.json';
 // Safe access to Vite environment variables for TypeScript linter
 const metaEnv = (import.meta as any).env || {};
 
-// Check for custom config saved in localStorage (e.g., entered by user for clinicaterapias-23ef8)
+// Check for custom config saved in localStorage (e.g., entered by user for bdclinica-nuevo)
 let customConfig: any = null;
 try {
   const saved = localStorage.getItem('custom_firebase_config');
   if (saved) {
     let parsed = JSON.parse(saved);
-    // Automatically sanitize and migrate any stored config with the extra 's' typo "clinicasterapias" to "clinicaterapias"
-    if (parsed && parsed.projectId && parsed.projectId.includes('clinicasterapias')) {
-      console.log('Migrating custom project ID in localStorage from clinicasterapias to clinicaterapias');
-      parsed.projectId = parsed.projectId.replace('clinicasterapias', 'clinicaterapias');
-      if (parsed.authDomain) {
-        parsed.authDomain = parsed.authDomain.replace('clinicasterapias', 'clinicaterapias');
-      }
-      if (parsed.storageBucket) {
-        parsed.storageBucket = parsed.storageBucket.replace('clinicasterapias', 'clinicaterapias');
-      }
+    // Automatically sanitize and migrate any stored config with the extra 's' typo to "bdclinica-nuevo"
+    if (parsed && parsed.projectId && (parsed.projectId.includes('clinicasterapias') || parsed.projectId.includes('clinicaterapias'))) {
+      console.log('Migrating custom project ID in localStorage to bdclinica-nuevo');
+      parsed.projectId = 'bdclinica-nuevo';
+      parsed.authDomain = 'bdclinica-nuevo.firebaseapp.com';
+      parsed.storageBucket = 'bdclinica-nuevo.firebasestorage.app';
+      parsed.messagingSenderId = '346136074960';
+      parsed.appId = '1:346136074960:web:0180e7135718b65597c427';
       localStorage.setItem('custom_firebase_config', JSON.stringify(parsed));
     }
     customConfig = parsed;
@@ -68,7 +66,9 @@ if (customConfig) {
 export const firebaseConfig = resolvedConfig;
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== "(default)"
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 
 export function saveCustomFirebaseConfig(config: any) {
@@ -115,9 +115,22 @@ export interface FirestoreErrorInfo {
   };
 }
 
+export let isFirestoreOfflineGlobal = false;
+try {
+  isFirestoreOfflineGlobal = localStorage.getItem('is_firestore_offline') === 'true';
+} catch (e) {}
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errMsg = error instanceof Error ? error.message : String(error);
+  if (errMsg.toLowerCase().includes('offline') || errMsg.toLowerCase().includes('client is offline') || errMsg.toLowerCase().includes('failed to get document')) {
+    isFirestoreOfflineGlobal = true;
+    try {
+      localStorage.setItem('is_firestore_offline', 'true');
+    } catch (e) {}
+  }
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errMsg,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -140,7 +153,13 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 async function testConnection() {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    isFirestoreOfflineGlobal = false;
+    localStorage.setItem('is_firestore_offline', 'false');
   } catch (error) {
+    isFirestoreOfflineGlobal = true;
+    try {
+      localStorage.setItem('is_firestore_offline', 'true');
+    } catch (e) {}
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration.");
     }
